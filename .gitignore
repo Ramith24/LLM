@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Machine Learning Models
+*.pt
+hf_mt_model/
+mt_model.pt
+mt_model_epoch_*.pt
+
+# Outputs
+pred.txt
+hf_pred.txt

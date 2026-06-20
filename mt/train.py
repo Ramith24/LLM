@@ -1,41 +1,48 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch
 
 from mt.vocab import build_vocab
 from mt.dataset import encode_file
 from mt.model import Seq2Seq
 
 # Load vocab
-src_vocab = build_vocab("data/train.my.bpe")
-tgt_vocab = build_vocab("data/train.en")
+src_vocab = build_vocab("Data/train.my.bpe")
+tgt_vocab = build_vocab("Data/train.en")
 
 # Load data
-src_data = encode_file("data/train.my.bpe", src_vocab)
+src_data = encode_file("Data/train.my.bpe", src_vocab)
 tgt_data = encode_file("Data/train.en", tgt_vocab, add_special=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", DEVICE)
 
-model = Seq2Seq(len(src_vocab), len(tgt_vocab)).to(DEVICE)
+model = Seq2Seq(len(src_vocab), len(tgt_vocab), emb_dim=256, hid_dim=512, num_layers=2, dropout=0.3).to(DEVICE)
 criterion = nn.CrossEntropyLoss(ignore_index=0)
 optimizer = optim.Adam(model.parameters())
 
-from gensim.models import KeyedVectors
+from gensim.models import Word2Vec
 import numpy as np
-
-ft = KeyedVectors.load_word2vec_format(
-    "Embeddings/fasttext_burmese.vec",
-    binary=False
-)
 
 emb_dim = model.src_emb.embedding_dim
 weights = np.random.randn(len(src_vocab), emb_dim)
 
+print("Training custom Word2Vec embeddings on the fly...")
+sentences = []
+with open("Data/train.my.bpe", encoding="utf-8") as f:
+    for line in f:
+        sentences.append(line.strip().split())
+
+w2v_model = Word2Vec(sentences, vector_size=emb_dim, min_count=1, workers=4)
+
+print("Loaded custom Word2Vec embeddings.")
 for word, idx in src_vocab.items():
-    if word in ft:
-        weights[idx] = ft[word]
+    if word in w2v_model.wv:
+        weights[idx] = w2v_model.wv[word]
 
 model.src_emb.weight.data.copy_(
     torch.tensor(weights, dtype=torch.float).to(DEVICE)
@@ -43,7 +50,7 @@ model.src_emb.weight.data.copy_(
 
 print("Initialized encoder embeddings with FastText (.vec)")
 
-BATCH_SIZE = 32
+BATCH_SIZE = 128
 
 
 def pad_batch(seqs, pad=0):
@@ -67,7 +74,8 @@ def create_src_mask(src, pad_idx=0):
     return mask
 
 
-EPOCHS = 5
+scaler = torch.amp.GradScaler('cuda')
+EPOCHS = 15
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
@@ -83,16 +91,19 @@ for epoch in range(EPOCHS):
 
         optimizer.zero_grad()
 
-        # Pass src_mask to model
-        output = model(src, tgt[:, :-1], src_mask)
+        with torch.amp.autocast('cuda'):
+            # Pass src_mask and teacher forcing to model
+            # We can anneal teacher forcing, but let's keep it constant at 0.5 for now
+            output = model(src, tgt[:, :-1], src_mask, teacher_forcing_ratio=0.5)
 
-        loss = criterion(
-            output.reshape(-1, output.size(-1)),
-            tgt[:, 1:].reshape(-1)
-        )
+            loss = criterion(
+                output.reshape(-1, output.size(-1)),
+                tgt[:, 1:].reshape(-1)
+            )
 
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         total_loss += loss.item()
 
@@ -100,6 +111,7 @@ for epoch in range(EPOCHS):
             print(f"Processed {i}/{len(src_data)} sentences")
 
     print(f"Epoch {epoch + 1} loss: {total_loss:.2f}")
+    torch.save(model.state_dict(), f"mt_model_epoch_{epoch + 1}.pt")
+    torch.save(model.state_dict(), "mt_model.pt")
 
-torch.save(model.state_dict(), "mt_model.pt")
-print("Model saved as mt_model.pt")
+print("Training complete. Model saved as mt_model.pt")

@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import torch
 from mt.vocab import build_vocab
 from mt.dataset import encode_file
@@ -22,7 +26,7 @@ inv_tgt_vocab = {v: k for k, v in tgt_vocab.items()}
 src_data = encode_file(SRC_TEST, src_vocab)
 
 # Load model
-model = Seq2Seq(len(src_vocab), len(tgt_vocab)).to(DEVICE)
+model = Seq2Seq(len(src_vocab), len(tgt_vocab), emb_dim=256, hid_dim=512, num_layers=2, dropout=0.3).to(DEVICE)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model.eval()
 

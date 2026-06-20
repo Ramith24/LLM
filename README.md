@@ -103,14 +103,14 @@ source venv/bin/activate
 ### 3. Install dependencies
 ```bash
 pip install torch torchvision torchaudio
-pip install numpy gensim sentencepiece
+pip install numpy gensim sentencepiece sacrebleu
 ```
 
 Or install with GPU support:
 ```bash
 # For CUDA 11.8
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-pip install numpy gensim sentencepiece
+pip install numpy gensim sentencepiece sacrebleu
 ```
 
 ### 4. Verify installation

@@ -35,7 +35,7 @@ class LuongAttention(nn.Module):
 
         # Mask padding positions
         if src_mask is not None:
-            scores = scores.masked_fill(src_mask == 0, -1e10)
+            scores = scores.masked_fill(src_mask == 0, -1e4)
 
         # Normalize to get attention weights
         attn_weights = F.softmax(scores, dim=1)  # (batch_size, src_len)
@@ -50,31 +50,33 @@ class LuongAttention(nn.Module):
 
 
 class Seq2Seq(nn.Module):
-    def __init__(self, src_vocab, tgt_vocab, emb_dim=300, hid_dim=256):
+    def __init__(self, src_vocab, tgt_vocab, emb_dim=300, hid_dim=256, num_layers=2, dropout=0.3):
         super().__init__()
 
         self.hid_dim = hid_dim
+        self.num_layers = num_layers
 
         self.src_emb = nn.Embedding(src_vocab, emb_dim)
         self.tgt_emb = nn.Embedding(tgt_vocab, emb_dim)
 
-        self.encoder = nn.LSTM(emb_dim, hid_dim, batch_first=True)
+        self.encoder = nn.LSTM(emb_dim, hid_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
 
         # Attention module
         self.attention = LuongAttention(hid_dim)
 
         # Decoder now takes [embedding; context]
-        self.decoder = nn.LSTM(emb_dim + hid_dim, hid_dim, batch_first=True)
+        self.decoder = nn.LSTM(emb_dim + hid_dim, hid_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
 
         # Output layer takes [decoder_output; context]
         self.fc = nn.Linear(hid_dim + hid_dim, tgt_vocab)
 
-    def forward(self, src, tgt, src_mask=None):
+    def forward(self, src, tgt, src_mask=None, teacher_forcing_ratio=0.5):
         """
         Args:
             src: (batch_size, src_len)
             tgt: (batch_size, tgt_len)
             src_mask: (batch_size, src_len)
+            teacher_forcing_ratio: float, probability of using true target as input
 
         Returns:
             output: (batch_size, tgt_len, vocab_size)
@@ -92,14 +94,25 @@ class Seq2Seq(nn.Module):
 
         # We'll process decoder step-by-step to apply attention
         outputs = []
+        
+        import random
 
         for t in range(tgt_len):
-            # Current target embedding
-            input_emb = tgt_emb[:, t:t + 1, :]  # (batch_size, 1, emb_dim)
+            # Decide whether to use teacher forcing
+            use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+            
+            if t == 0 or use_teacher_forcing:
+                # Current target embedding
+                input_emb = tgt_emb[:, t:t + 1, :]  # (batch_size, 1, emb_dim)
+            else:
+                # Use highest predicted token from previous step
+                top1 = output.argmax(1)  # (batch_size)
+                input_emb = self.tgt_emb(top1).unsqueeze(1)  # (batch_size, 1, emb_dim)
 
-            # Compute attention using current hidden state
-            # h: (1, batch_size, hid_dim) -> squeeze -> (batch_size, hid_dim)
-            context, attn_weights = self.attention(h.squeeze(0), encoder_outputs, src_mask)
+            # Compute attention using top layer's hidden state
+            # h: (num_layers, batch_size, hid_dim) -> select top layer -> (batch_size, hid_dim)
+            h_top = h[-1]
+            context, attn_weights = self.attention(h_top, encoder_outputs, src_mask)
 
             # Concatenate embedding with context
             # context: (batch_size, hid_dim) -> (batch_size, 1, hid_dim)
@@ -140,8 +153,9 @@ class Seq2Seq(nn.Module):
         # Embed input
         input_emb = self.tgt_emb(input_token)  # (batch_size, 1, emb_dim)
 
-        # Compute attention
-        context, attn_weights = self.attention(h.squeeze(0), encoder_outputs, src_mask)
+        # Compute attention using top layer's hidden state
+        h_top = h[-1]
+        context, attn_weights = self.attention(h_top, encoder_outputs, src_mask)
 
         # Concatenate embedding with context
         decoder_input = torch.cat([input_emb, context.unsqueeze(1)], dim=2)
