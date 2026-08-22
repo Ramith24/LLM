@@ -11,3 +11,11 @@ mt_model_epoch_*.pt
 # Outputs
 pred.txt
 hf_pred.txt
+
+# Phase 4 & 5 Large Files
+hf_mt_model_*/
+Data/filtered_opus/
+Data/synthetic_bt/
+*.safetensors
+Data/*.unicode
+Data/*.zawgyi_backup

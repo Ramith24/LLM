@@ -1,0 +1,13 @@
+torch>=2.0.0
+torchvision
+torchaudio
+numpy>=1.21.0
+gensim>=4.0.0
+sentencepiece>=0.1.99
+sacrebleu>=2.3.1
+transformers>=4.31.0
+peft>=0.4.0
+datasets>=2.14.0
+evaluate>=0.4.0
+scipy>=1.10.0
+tqdm

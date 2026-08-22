@@ -1,0 +1,25 @@
+--- Sample 4403 ---
+Source (Burmese): ▁တကယ်လို့ ▁ကိုယ့် လက် တွဲ ဖော် က ▁တခြား သူ ▁တဦး ဦး နဲ့ ▁တွေ့ လိုက် ရတယ် ▁ဆိုပါ စို့ ....
+Reference (English): my ex wife dating someone else...
+Prediction (AI): Let's say you've met someone else...
+
+--- Sample 4874 ---
+Source (Burmese): ▁5 ▁သံတမန် တို့သည် ▁ပြန်လာ သောအခါ ▁ရှင်ဘုရင်က၊ ▁အဘယ်ကြောင့် ယခု ပြန်လာ ကြ သနည်းဟု ▁မေးလျှင်၊
+Reference (English): 5: The messengers returned to the king, and he said to them, "Why have you returned?"
+Prediction (AI): 5 When the messengers returned, the king said to them, "Why have you returned now?"
+
+--- Sample 3295 ---
+Source (Burmese): ▁14 ▁ယနေ့ ▁ငါ ဆင့် ဆို သော ▁စကား တော် လမ်း မှ ထွက် ▁၍ ▁လက်ျာ ဘက် ၊ ▁လက်ဝဲ ဘက်သို့ မ လွှဲ ၊ ▁အခြား တပါးသော ▁ဘုရား နောက်သို့ ▁လိုက် ၍ ▁ဝတ် မပြု ဘဲနေ လျှင် ၎င်း၊ ▁ထိုသို့ ▁သော ▁ကျေးဇူးတော်ကို ▁ခံရလိမ့်မည်။
+Reference (English): VERSE 14. and shall not turn away from any of the words which I command you today, to the right hand or to the left, to go after other gods to serve them.
+Prediction (AI): 14 If he turneth not from the way of these words which I command him this day, to turn not to the right hand or to the left, to go after other gods, to serve them, he shall be blessed.
+
+--- Sample 5464 ---
+Source (Burmese): ▁O L T AN ▁F O O D ▁- ▁အ ီတ လီ ကို ▁F er r er o ▁က ဝယ် ခဲ့တယ်။
+Reference (English): OLTAN FOOD: It was bought by the Italian Ferrero.
+Prediction (AI): The Italian was bought by Ferrero.
+
+--- Sample 5772 ---
+Source (Burmese): ▁ကျန်းမာရေး ဆိုင်ရာ ▁အရေး ပေါ် အခြေအနေ တွင် ▁၉ ၁၁ ▁ကို ▁ဖုန်း ခေါ် ပါ။
+Reference (English): Call 911 in a medical emergency.
+Prediction (AI): Call 911 in case of a medical emergency.
+

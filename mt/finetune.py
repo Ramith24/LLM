@@ -42,16 +42,11 @@ val_dict = load_and_clean_data("Data/val.my.bpe", "Data/val.en")
 local_train = Dataset.from_dict(train_dict) # Keep all 79k
 val_dataset = Dataset.from_dict(val_dict) # Keep all 10k
 
-print("Downloading OPUS-100 external dataset...")
-# OPUS-100 has exactly 24,594 English-Burmese sentences
-opus_dataset = load_dataset("opus100", "en-my", split="train")
-# Strip the custom HuggingFace Translation feature type to match our local dataset
-opus_subset = Dataset.from_dict({"translation": opus_dataset["translation"]}).shuffle(seed=42)
+# We keep this script strictly for Phase 4 (LoRA fine-tuning on local dataset only).
+# OPUS-100 augmentation is moved to a separate Phase 5 script.
+train_dataset = local_train
 
-print("Merging datasets...")
-train_dataset = concatenate_datasets([local_train, opus_subset]).shuffle(seed=42)
-
-print(f"Loaded a massive {len(train_dataset)} training pairs and {len(val_dataset)} validation pairs.")
+print(f"Loaded {len(train_dataset)} training pairs and {len(val_dataset)} validation pairs.")
 
 print("Loading tokenizer and model...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_CHECKPOINT, src_lang=SRC_LANG, tgt_lang=TGT_LANG, local_files_only=True)
@@ -59,9 +54,9 @@ model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_CHECKPOINT, use_safetensors=
 
 print("Applying LoRA to the model...")
 lora_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
-    target_modules=["q_proj", "v_proj"],
+    r=32,
+    lora_alpha=64,
+    target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "fc1", "fc2"],
     lora_dropout=0.05,
     bias="none",
     task_type=TaskType.SEQ_2_SEQ_LM
@@ -84,6 +79,29 @@ tokenized_val = val_dataset.map(preprocess_function, batched=True, remove_column
 
 data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
 
+import numpy as np
+import evaluate
+
+metric = evaluate.load("sacrebleu")
+
+def compute_metrics(eval_preds):
+    preds, labels = eval_preds
+    if isinstance(preds, tuple):
+        preds = preds[0]
+        
+    decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+    
+    # Replace -100 in the labels as we can't decode them
+    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    
+    # SacreBLEU requires targets to be in a list of lists
+    decoded_labels = [[label.strip()] for label in decoded_labels]
+    decoded_preds = [pred.strip() for pred in decoded_preds]
+    
+    result = metric.compute(predictions=decoded_preds, references=decoded_labels)
+    return {"bleu": result["score"]}
+
 args = Seq2SeqTrainingArguments(
     output_dir="hf_mt_model",
     eval_strategy="epoch",
@@ -92,16 +110,18 @@ args = Seq2SeqTrainingArguments(
     per_device_eval_batch_size=4,
     gradient_accumulation_steps=2,
     weight_decay=0.01,
-    save_strategy="steps",
-    save_steps=2000,
-    save_total_limit=3,
-    num_train_epochs=3, # 3 epochs on 103k sentences guarantees it finishes in exactly 3.6 hours!
+    save_strategy="epoch",
+    save_total_limit=5,
+    num_train_epochs=15,
     predict_with_generate=True,
-    fp16=True, # Use mixed precision
+    fp16=True,
     gradient_checkpointing=False,
     push_to_hub=False,
     logging_steps=500,
-    dataloader_num_workers=0
+    dataloader_num_workers=0,
+    load_best_model_at_end=True,
+    metric_for_best_model="bleu",
+    greater_is_better=True,
 )
 
 trainer = Seq2SeqTrainer(
@@ -111,6 +131,7 @@ trainer = Seq2SeqTrainer(
     eval_dataset=tokenized_val,
     data_collator=data_collator,
     processing_class=tokenizer,
+    compute_metrics=compute_metrics,
 )
 
 from transformers.trainer_utils import get_last_checkpoint

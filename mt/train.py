@@ -17,6 +17,8 @@ tgt_vocab = build_vocab("Data/train.en")
 # Load data
 src_data = encode_file("Data/train.my.bpe", src_vocab)
 tgt_data = encode_file("Data/train.en", tgt_vocab, add_special=True)
+val_src_data = encode_file("Data/val.my.bpe", src_vocab)
+val_tgt_data = encode_file("Data/val.en", tgt_vocab, add_special=True)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", DEVICE)
@@ -74,6 +76,10 @@ def create_src_mask(src, pad_idx=0):
     return mask
 
 
+import csv
+with open("training_metrics.csv", "w") as f:
+    f.write("epoch,train_loss,val_loss\n")
+
 scaler = torch.amp.GradScaler('cuda')
 EPOCHS = 15
 for epoch in range(EPOCHS):
@@ -110,7 +116,35 @@ for epoch in range(EPOCHS):
         if i % 5000 == 0:
             print(f"Processed {i}/{len(src_data)} sentences")
 
-    print(f"Epoch {epoch + 1} loss: {total_loss:.2f}")
+    # Validation loop
+    model.eval()
+    val_loss = 0.0
+    with torch.no_grad():
+        for i in range(0, len(val_src_data), BATCH_SIZE):
+            val_src_batch = val_src_data[i:i + BATCH_SIZE]
+            val_tgt_batch = val_tgt_data[i:i + BATCH_SIZE]
+            
+            src = pad_batch(val_src_batch).to(DEVICE)
+            tgt = pad_batch(val_tgt_batch).to(DEVICE)
+            src_mask = create_src_mask(src, pad_idx=0).to(DEVICE)
+            
+            with torch.amp.autocast('cuda'):
+                output = model(src, tgt[:, :-1], src_mask, teacher_forcing_ratio=0.0) # No teacher forcing during val
+                loss = criterion(
+                    output.reshape(-1, output.size(-1)),
+                    tgt[:, 1:].reshape(-1)
+                )
+            val_loss += loss.item()
+            
+    avg_train_loss = total_loss / (len(src_data) / BATCH_SIZE)
+    avg_val_loss = val_loss / (len(val_src_data) / BATCH_SIZE)
+    print(f"Epoch {epoch + 1} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+    
+    # Save metrics to CSV
+    with open("training_metrics.csv", "a") as f:
+        f.write(f"{epoch+1},{avg_train_loss:.4f},{avg_val_loss:.4f}\n")
+
+    model.train() # Set back to train mode
     torch.save(model.state_dict(), f"mt_model_epoch_{epoch + 1}.pt")
     torch.save(model.state_dict(), "mt_model.pt")
 
